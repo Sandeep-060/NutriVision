@@ -1,4 +1,6 @@
 # Virtual environment
 .venv/
 
- 
+# Local data
+data/raw/
+data/processed/
