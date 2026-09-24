@@ -1,13 +1,9 @@
 from pathlib import Path
 from collections import Counter
-
 from PIL import Image
 
 
-# ============================================================
 # PATHS
-# ============================================================
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DATASET_DIR = (
@@ -27,11 +23,7 @@ DATA_YAML = DATASET_DIR / "data.yaml"
 
 EXPECTED_CLASSES = 103
 
-
-# ============================================================
 # HELPERS
-# ============================================================
-
 def validate_split(name, image_dir, label_dir):
     print("\n" + "=" * 70)
     print(name)
@@ -48,20 +40,14 @@ def validate_split(name, image_dir, label_dir):
     print("Images:", len(image_files))
     print("Labels:", len(label_files))
 
-    # --------------------------------------------------------
     # Image / label count
-    # --------------------------------------------------------
-
     if len(image_files) != len(label_files):
         print("ERROR: Image/label count mismatch")
         errors += 1
     else:
         print("Image/label counts: OK")
 
-    # --------------------------------------------------------
     # Image / label pairing
-    # --------------------------------------------------------
-
     missing_labels = image_stems - label_stems
     missing_images = label_stems - image_stems
 
@@ -76,10 +62,7 @@ def validate_split(name, image_dir, label_dir):
     if not missing_labels and not missing_images:
         print("Image/label pairing: OK")
 
-    # --------------------------------------------------------
     # Validate images
-    # --------------------------------------------------------
-
     bad_images = 0
 
     for image_path in image_files:
@@ -98,10 +81,7 @@ def validate_split(name, image_dir, label_dir):
     else:
         print("Images readable: OK")
 
-    # --------------------------------------------------------
     # Validate YOLO labels
-    # --------------------------------------------------------
-
     annotation_count = 0
     class_counter = Counter()
     bad_labels = 0
@@ -188,10 +168,7 @@ def validate_split(name, image_dir, label_dir):
     else:
         print("YOLO annotations: OK")
 
-    # --------------------------------------------------------
     # Class coverage
-    # --------------------------------------------------------
-
     missing_classes = [
         class_id
         for class_id in range(EXPECTED_CLASSES)
@@ -218,10 +195,7 @@ def validate_split(name, image_dir, label_dir):
     }
 
 
-# ============================================================
 # DATA.YAML VALIDATION
-# ============================================================
-
 def validate_data_yaml():
 
     print("\n" + "=" * 70)
@@ -256,10 +230,7 @@ def validate_data_yaml():
     return errors
 
 
-# ============================================================
 # MAIN
-# ============================================================
-
 def main():
 
     print("=" * 70)
