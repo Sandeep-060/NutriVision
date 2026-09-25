@@ -413,12 +413,7 @@ def main():
     else:
         print("FULL DATASET")
 
-    with open(
-        ID2LABEL_PATH,
-        "r",
-        encoding="utf-8",
-    ) as file:
-
+    with open(ID2LABEL_PATH,"r",encoding="utf-8",) as file:
         id2label = json.load(file)
 
     print("\nTotal label IDs:", len(id2label))
@@ -426,10 +421,7 @@ def main():
 
     create_directories()
 
-    # --------------------------------------------------------
     # TRAIN
-    # --------------------------------------------------------
-
     print("\n" + "=" * 70)
     print("TRAIN")
     print("=" * 70)
@@ -442,10 +434,8 @@ def main():
         args.limit,
     )
 
-    # --------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------
 
+    # VALIDATION
     print("\n" + "=" * 70)
     print("VALIDATION")
     print("=" * 70)
@@ -461,9 +451,7 @@ def main():
     # Create YAML even during test.
     create_data_yaml(id2label)
 
-    # --------------------------------------------------------
     # SUMMARY
-    # --------------------------------------------------------
 
     print("\n" + "=" * 70)
     print("CONVERSION SUMMARY")
