@@ -30,6 +30,7 @@ def build_yolov8_baseline(
         ),
         classification_loss="binary_crossentropy",
         box_loss="ciou",
+        jit_compile=False,
     )
 
     return detector
