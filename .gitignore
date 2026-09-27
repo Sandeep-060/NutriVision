@@ -5,3 +5,6 @@
 data/raw/
 data/processed/
 data/sample/
+
+__pycache__/
+*.pyc
