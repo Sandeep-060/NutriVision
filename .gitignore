@@ -8,3 +8,5 @@ data/sample/
 
 __pycache__/
 *.pyc
+
+models
