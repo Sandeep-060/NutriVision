@@ -3,10 +3,15 @@
 
 # Local data
 data/raw/
-data/processed/
 data/sample/
 
 __pycache__/
 *.pyc
 
 models
+
+data/raw/
+data/processed/*
+!data/processed/nutrition/
+!data/processed/nutrition/nutrition_reference.csv
+data/sample/
