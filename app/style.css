@@ -1,0 +1,385 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ==========================================================================
+   NutriVision - Streamlit skin (dark theme from the HTML prototype)
+   ========================================================================== */
+:root{
+  --bg:#141712; --surface:#1C201A; --surface-2:#222720;
+  --ink:#EDEAE0; --ink-2:#ABB2A4; --ink-3:#7B8276;
+  --line:#2E332B; --line-strong:#3D4337;
+  --green:#5CAE85; --green-bg:#1E3128; --green-ink:#9BDBB6;
+  --mango:#E6A055; --mango-bg:#3A2B16; --mango-ink:#F0BE82;
+  --danger:#E08579; --danger-bg:#3A241F; --danger-ink:#F0A79C;
+  --r:14px; --rs:9px;
+}
+
+/* ---------- Streamlit chrome reset ---------- */
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"]{
+  background:var(--bg) !important; color:var(--ink);
+  font-family:'Inter',system-ui,sans-serif; color-scheme:dark;
+}
+[data-testid="stMain"]{scroll-behavior:smooth;}
+[data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"],
+[data-testid="stStatusWidget"], #MainMenu, footer, [data-testid="stSidebar"],
+[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"]{display:none !important;}
+[data-testid="stMainBlockContainer"], .stMainBlockContainer, .block-container{
+  max-width:100% !important; padding:0 !important; margin:0 !important;
+}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"],
+.block-container > [data-testid="stVerticalBlock"]{gap:0 !important;}
+[data-testid="stVerticalBlock"]{gap:0;}
+[data-testid="stElementContainer"], .element-container{margin:0;}
+[data-testid="stMarkdownContainer"]{color:inherit; margin-bottom:0 !important;}
+[data-testid="stMarkdownContainer"] > *{margin:0;}
+[data-testid="stMarkdownContainer"] p{margin:0;}
+.stApp *, .stApp *::before, .stApp *::after{box-sizing:border-box;}
+
+/* ---------- Top bar ---------- */
+.st-key-topbar{
+  position:sticky; top:0; z-index:50; background:var(--bg);
+  border-bottom:1px solid var(--line); padding:14px 22px;
+}
+/* newer Streamlit wraps keyed containers in a layout wrapper: that is what must stick */
+[data-testid="stLayoutWrapper"]:has(> .st-key-topbar), [data-testid="stElementContainer"]:has(> .st-key-topbar){
+  position:sticky; top:0; z-index:50; background:var(--bg);
+}
+.st-key-row_topbar{
+  display:flex !important; flex-direction:row !important; align-items:center;
+  justify-content:space-between; gap:12px; flex-wrap:nowrap;
+}
+.st-key-row_topbar > *{width:auto !important; flex:0 0 auto; min-width:0;}
+
+/* Row containers (flex rows that never stack, even on phones) */
+.st-key-row_steps, .st-key-row_cta, .st-key-row_sample,
+[class*="st-key-pills_"], .st-key-foot_lr, .st-key-foot_l, .st-key-foot_in_card{
+  display:flex !important; flex-direction:row !important; align-items:center;
+}
+.st-key-row_steps{gap:4px;}
+.st-key-row_steps > *{flex:1 1 0 !important; width:auto !important; min-width:0;}
+.st-key-row_cta{gap:12px; flex-wrap:wrap;}
+.st-key-row_cta > *{flex:0 0 auto; width:auto !important;}
+.st-key-row_sample{justify-content:center; margin-top:10px;}
+.st-key-row_sample > *{width:auto !important;}
+[class*="st-key-pills_"]{gap:6px;}
+[class*="st-key-pills_"] > *{flex:1 1 0 !important; width:auto !important; min-width:0;}
+.st-key-foot_lr{justify-content:space-between; margin-top:2px;}
+.st-key-foot_l{justify-content:flex-start; margin-top:2px;}
+.st-key-foot_in_card{justify-content:flex-end; margin-top:14px;}
+.st-key-foot_lr > *, .st-key-foot_l > *, .st-key-foot_in_card > *{width:auto !important; flex:0 0 auto;}
+
+/* ---------- Buttons: base reset ---------- */
+.stApp [data-testid="stButton"] button,
+.stApp [data-testid^="stBaseButton"]{
+  font-family:'Inter',system-ui,sans-serif; min-height:0; height:auto; line-height:1.2;
+  box-shadow:none !important; margin:0; cursor:pointer;
+  transition:filter .15s ease, border-color .15s ease, background-color .15s ease;
+}
+.stApp [data-testid="stButton"] button p,
+.stApp [data-testid="stButton"] button div{
+  font-family:inherit; font-size:inherit; font-weight:inherit; line-height:inherit;
+  color:inherit; margin:0; white-space:nowrap;
+}
+.stApp [data-testid="stButton"]{width:auto;}
+
+/* Brand (clickable, like the prototype) */
+.stApp .st-key-brand [data-testid^="stBaseButton"]{
+  background:none !important; border:none !important; padding:0 !important;
+  color:var(--ink) !important; font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:19px;
+  border-radius:0;
+}
+.stApp .st-key-brand button p{display:flex; align-items:center; gap:8px; font-family:'Fraunces',Georgia,serif;}
+.stApp .st-key-brand button p::before{
+  content:""; width:9px; height:9px; border-radius:50%; background:var(--mango); flex:0 0 auto;
+}
+.stApp .st-key-brand button p::after{
+  content:"meal analyzer"; font-family:'Inter',system-ui,sans-serif; font-size:11px;
+  color:var(--ink-3); font-weight:500; letter-spacing:.01em; margin-left:2px;
+}
+
+/* Primary (green) */
+.stApp [data-testid="stBaseButton-primary"]{
+  background:var(--green) !important; color:#fff !important; border:none !important;
+  padding:12px 20px; border-radius:var(--rs); font-size:14px; font-weight:600;
+}
+.stApp [data-testid="stBaseButton-primary"]:hover{filter:brightness(1.08);}
+.stApp [data-testid="stBaseButton-primary"]:focus,
+.stApp [data-testid="stBaseButton-primary"]:active{
+  background:var(--green) !important; color:#fff !important; border:none !important; outline:none;
+}
+.stApp [data-testid="stBaseButton-primary"]:disabled{
+  background:var(--line-strong) !important; color:var(--ink-3) !important;
+  cursor:not-allowed; filter:none; opacity:1;
+}
+
+/* Secondary (ghost) */
+.stApp [data-testid="stBaseButton-secondary"]{
+  background:transparent !important; color:var(--ink) !important;
+  border:1px solid var(--line-strong) !important; padding:11px 18px;
+  border-radius:var(--rs); font-size:14px; font-weight:500;
+}
+.stApp [data-testid="stBaseButton-secondary"]:hover{
+  border-color:var(--green) !important; color:var(--ink) !important; background:transparent !important;
+}
+.stApp [data-testid="stBaseButton-secondary"]:focus,
+.stApp [data-testid="stBaseButton-secondary"]:active{
+  background:transparent !important; color:var(--ink) !important; outline:none;
+  border-color:var(--line-strong) !important;
+}
+.stApp [data-testid="stBaseButton-secondary"]:disabled{opacity:.55; cursor:not-allowed;}
+
+/* Tertiary (text/link buttons) */
+.stApp [data-testid="stBaseButton-tertiary"]{
+  background:none !important; border:none !important; padding:0 !important;
+  color:var(--green-ink) !important; font-size:13px; font-weight:600;
+  text-decoration:underline; text-underline-offset:2px; border-radius:0;
+}
+.stApp [data-testid="stBaseButton-tertiary"]:hover{filter:brightness(1.15); background:none !important;}
+.stApp [data-testid="stBaseButton-tertiary"]:focus,
+.stApp [data-testid="stBaseButton-tertiary"]:active{
+  background:none !important; color:var(--green-ink) !important; outline:none;
+}
+
+/* Top-bar CTA + hero CTA (pill) */
+.st-key-top_cta [data-testid="stBaseButton-primary"]{
+  padding:9px 18px; border-radius:99px; font-size:13.5px; font-weight:600;
+}
+.st-key-hero_cta [data-testid="stBaseButton-primary"]{
+  padding:13px 24px; border-radius:99px; font-size:15px; font-weight:600;
+}
+
+/* Step bar */
+[class*="st-key-step"] [data-testid^="stBaseButton"]{
+  width:100%; padding:9px 4px; border-radius:8px; font-size:11.5px; font-weight:600;
+  border:none !important; text-align:center; justify-content:center;
+}
+[class*="st-key-stepoff_"] [data-testid^="stBaseButton"]{
+  background:var(--surface-2) !important; color:var(--ink-3) !important; opacity:.55; cursor:not-allowed;
+}
+[class*="st-key-stepdone_"] [data-testid^="stBaseButton"]{
+  background:var(--green-bg) !important; color:var(--green-ink) !important; opacity:1;
+}
+[class*="st-key-stepcur_"] [data-testid^="stBaseButton"]{
+  background:var(--green) !important; color:#fff !important; opacity:1;
+}
+[class*="st-key-step"] [data-testid^="stBaseButton"]:hover{filter:brightness(1.08);}
+
+/* Decision pills */
+[class*="st-key-pills_"] [data-testid="stButton"]{width:100%;}
+[class*="st-key-pills_"] [data-testid^="stBaseButton"]{
+  width:100%; padding:8px 4px; border-radius:7px; font-size:12.5px; font-weight:500;
+  justify-content:center;
+}
+[class*="st-key-pills_"] [data-testid="stBaseButton-secondary"]{
+  background:var(--surface) !important; color:var(--ink-2) !important;
+  border:1px solid var(--line-strong) !important;
+}
+[class*="st-key-pills_"] [data-testid="stBaseButton-primary"]{
+  background:var(--green) !important; color:#fff !important; border:1px solid var(--green) !important;
+}
+
+/* ---------- Home ---------- */
+.st-key-home{max-width:1040px; margin:0 auto !important; padding:0 22px !important; width:100%;}
+.st-key-hero{padding:52px 0 20px;}
+.st-key-hero [data-testid="stHorizontalBlock"]{gap:44px !important; align-items:center !important; flex-wrap:nowrap;}
+.st-key-hero [data-testid="stColumn"], .st-key-hero [data-testid="column"]{min-width:0 !important; width:auto !important;}
+.st-key-hero [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child,
+.st-key-hero [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child{flex:1.1 1 0 !important;}
+.st-key-hero [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child,
+.st-key-hero [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child{flex:1 1 0 !important;}
+
+.stApp .hero-title{
+  font-family:'Fraunces',Georgia,serif; font-weight:600; color:var(--ink);
+  font-size:clamp(32px,5vw,50px); line-height:1.08; letter-spacing:-.01em; max-width:9.5em; margin:0;
+}
+.stApp .lede{color:var(--ink-2); font-size:16.5px; line-height:1.6; margin:18px 0 26px; max-width:32em;}
+
+.stApp a.btn-text{
+  color:var(--ink) !important; font-size:14.5px; font-weight:600; cursor:pointer;
+  text-decoration:underline !important; text-underline-offset:3px; text-decoration-color:var(--line-strong);
+  white-space:nowrap;
+}
+.stApp a.btn-text:hover{text-decoration-color:var(--green) !important;}
+
+.stApp .plate-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:18px;
+  box-shadow:0 18px 40px -22px rgba(0,0,0,.6);
+}
+.stApp .plate-card img{display:block; width:100%; height:auto; border-radius:12px;}
+
+.stApp .how{margin:30px 0 70px; scroll-margin-top:80px;}
+.stApp .how-title{font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:22px; margin-bottom:22px; color:var(--ink);}
+.stApp .how-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px;}
+.stApp .how-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:18px 16px;}
+.stApp .how-card .n{font-family:'Fraunces',Georgia,serif; font-size:22px; color:var(--mango); margin-bottom:8px; font-weight:600;}
+.stApp .how-h{font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:14.5px; margin-bottom:6px; color:var(--ink);}
+.stApp .how-p{font-size:13px; color:var(--ink-2); line-height:1.5; margin:0;}
+.stApp .honest-inner{
+  background:var(--surface-2); border-radius:var(--r); padding:20px 22px; font-size:13.5px;
+  color:var(--ink-2); line-height:1.6; margin-bottom:70px;
+}
+.stApp .honest-inner b{color:var(--ink); font-weight:700;}
+
+/* ---------- App shell ---------- */
+.st-key-app{max-width:640px; margin:0 auto !important; padding:0 18px !important; width:100%;}
+.st-key-row_steps{margin-top:16px;}
+.st-key-wrap{padding:18px 0 60px;}
+
+[class*="st-key-card_"]{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:18px; margin-bottom:12px;
+}
+.stApp .st-title{font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:17px; margin:0 0 4px; color:var(--ink); line-height:1.3;}
+.stApp .substep{font-size:13px; color:var(--ink-2); margin:0; padding-bottom:14px; line-height:1.4;}
+.stApp .note{font-size:12.5px; color:var(--ink-2); margin:0; padding-bottom:14px; line-height:1.5;}
+
+/* Upload drop zone */
+[data-testid="stFileUploader"]{width:100%;}
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploaderDropzone"]{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+  border:1.5px dashed var(--line-strong) !important; border-radius:12px !important;
+  padding:34px 16px !important; background:var(--surface) !important; color:var(--ink-2);
+  text-align:center; min-height:0;
+}
+[data-testid="stFileUploaderDropzone"]:hover{border-color:var(--green) !important;}
+[data-testid="stFileUploaderDropzone"] > [data-testid="stFileUploaderDropzoneInstructions"]{order:1;}
+[data-testid="stFileUploaderDropzone"] > span{order:2;}
+[data-testid="stFileUploaderDropzoneInstructions"]{font-size:0 !important; display:block; text-align:center;}
+[data-testid="stFileUploaderDropzoneInstructions"] > *{display:none !important;}
+[data-testid="stFileUploaderDropzoneInstructions"]::before{
+  content:"Tap to choose a photo \A JPG or PNG"; white-space:pre-line;
+  font-size:14px; line-height:1.5; color:var(--ink-2); font-family:'Inter',system-ui,sans-serif;
+}
+.st-key-drop_has [data-testid="stFileUploaderDropzoneInstructions"]::before{
+  content:"Photo selected \2014  tap to replace"; white-space:pre-line;
+}
+[data-testid="stFileUploaderDropzone"] [data-testid^="stBaseButton"]{
+  background:transparent !important; border:1px solid var(--line-strong) !important; color:var(--ink) !important;
+  padding:7px 14px; border-radius:var(--rs); font-size:12.5px; font-weight:500;
+}
+[data-testid="stFileUploaderDropzone"] [data-testid^="stBaseButton"]:hover{border-color:var(--green) !important;}
+[data-testid="stFileUploaderFile"], [data-testid="stFileUploaderPagination"],
+[data-testid="stFileUploaderDeleteBtn"], [data-testid="stFileUploaderFileList"]{display:none !important;}
+[data-testid="stFileUploader"] small{display:none;}
+
+/* Preview + detection boxes */
+.stApp .preview{
+  position:relative; border-radius:12px; overflow:hidden; margin-top:14px; width:100%;
+  aspect-ratio:1/1; background:var(--surface-2);
+}
+.stApp .preview img{display:block; width:100%; height:100%; object-fit:cover; margin:0;}
+.stApp .box{position:absolute; border-width:2px; border-style:solid; border-radius:3px;}
+.stApp .box span{
+  position:absolute; top:-20px; left:-2px; font-size:10.5px; padding:2px 6px; border-radius:4px;
+  white-space:nowrap; font-weight:600;
+}
+.stApp .b-ok{border-color:var(--green);} .stApp .b-ok span{background:var(--green-bg); color:var(--green-ink);}
+.stApp .b-warn{border-color:var(--mango); border-style:dashed;} .stApp .b-warn span{background:var(--mango-bg); color:var(--mango-ink);}
+.stApp .b-bad{border-color:var(--danger); border-style:dashed;} .stApp .b-bad span{background:var(--danger-bg); color:var(--danger-ink);}
+
+/* Review cards */
+.stApp .item-head{display:flex; justify-content:space-between; align-items:center; gap:8px; padding-bottom:2px;}
+.stApp .item-name{font-size:14.5px; font-weight:600; color:var(--ink);}
+.stApp .conf{font-size:12.5px; color:var(--ink-3); margin:0; padding:2px 0 10px;}
+.stApp .badge{font-size:11px; padding:3px 10px; border-radius:20px; font-weight:600; white-space:nowrap;}
+.stApp .bg-ok{background:var(--green-bg); color:var(--green-ink);}
+.stApp .bg-warn{background:var(--mango-bg); color:var(--mango-ink);}
+.stApp .bg-bad{background:var(--danger-bg); color:var(--danger-ink);}
+
+/* Select box (react-aria combobox in new Streamlit, BaseWeb in older builds) */
+[data-testid="stSelectbox"]{margin-top:9px;}
+[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stSelectbox"] [role="group"]{
+  min-height:40px; height:40px; background:var(--surface) !important; color:var(--ink) !important;
+  border:1px solid var(--line-strong) !important; border-radius:8px !important; font-size:14px;
+  box-shadow:none !important; outline:none;
+}
+[data-testid="stSelectbox"] [data-baseweb="select"] > div:focus-within,
+[data-testid="stSelectbox"] [role="group"]:focus-within{border-color:var(--green) !important;}
+[data-testid="stSelectbox"] input, [data-testid="stSelectbox"] [data-baseweb="select"] *{
+  color:var(--ink) !important; -webkit-text-fill-color:var(--ink); background:transparent;
+  font-family:'Inter',system-ui,sans-serif; font-size:14px;
+}
+[data-testid="stSelectbox"] input::placeholder{color:var(--ink-3) !important; -webkit-text-fill-color:var(--ink-3); opacity:1;}
+[data-testid="stSelectbox"] button{background:transparent !important; border:none !important; color:var(--ink-3) !important; padding:0 8px; min-height:0;}
+[data-testid="stSelectbox"] svg{fill:var(--ink-3) !important; color:var(--ink-3);}
+
+/* Dropdown list (rendered in a portal outside the card) */
+[role="listbox"], [data-baseweb="popover"] ul, [data-baseweb="menu"]{
+  background:var(--surface) !important; color:var(--ink) !important;
+  border:1px solid var(--line-strong); border-radius:8px;
+}
+div:has(> [role="listbox"]), div:has(> div > [role="listbox"]), [data-baseweb="popover"], [data-baseweb="popover"] > div{
+  background:var(--surface) !important; border-radius:8px; box-shadow:0 12px 30px -12px rgba(0,0,0,.7);
+}
+[role="option"], [data-baseweb="popover"] li, [data-baseweb="menu"] li{
+  background:transparent !important; color:var(--ink) !important; font-size:14px;
+  font-family:'Inter',system-ui,sans-serif;
+}
+[role="option"] *{color:var(--ink) !important; font-size:14px; font-family:'Inter',system-ui,sans-serif;}
+[role="option"]:hover, [role="option"][data-focused="true"], [role="option"][aria-selected="true"],
+[data-baseweb="popover"] li:hover, [data-baseweb="popover"] li[aria-selected="true"]{
+  background:var(--surface-2) !important;
+}
+
+/* Quantity inputs */
+.stApp .qtyname{font-size:13.5px; font-weight:600; color:var(--ink);}
+[class*="st-key-qty_item_"]{margin-bottom:14px;}
+[data-testid="stNumberInput"]{margin-top:9px;}
+/* new Streamlit: the container is the field; older: BaseWeb input wrapper */
+[data-testid="stNumberInputContainer"], [data-testid="stNumberInput"] [data-baseweb="input"]{
+  background:var(--surface) !important; border:1px solid var(--line-strong) !important;
+  border-radius:8px !important; min-height:40px; height:40px; overflow:hidden; box-shadow:none !important;
+}
+[data-testid="stNumberInputContainer"]:focus-within, [data-testid="stNumberInput"] [data-baseweb="input"]:focus-within{
+  border-color:var(--green) !important;
+}
+[data-testid="stNumberInput"] [data-baseweb="base-input"]{background:transparent !important; border:none !important; height:100%;}
+[data-testid="stNumberInput"] input{
+  height:38px; padding:0 10px; color:var(--ink) !important; -webkit-text-fill-color:var(--ink);
+  background:transparent !important; font-size:14px; font-family:'Inter',system-ui,sans-serif;
+  border:none !important; box-shadow:none !important; outline:none;
+}
+[data-testid="stNumberInput"] input::placeholder{color:var(--ink-3) !important; -webkit-text-fill-color:var(--ink-3); opacity:1;}
+[data-testid="stNumberInputStepUp"], [data-testid="stNumberInputStepDown"],
+[data-testid="stNumberInputContainer"] > div:not([data-baseweb]){display:none !important;}
+.stApp .err{color:var(--danger); font-size:12px; margin-top:5px;}
+
+/* Banners */
+.stApp .banner{background:var(--mango-bg); color:var(--mango-ink); font-size:13px; padding:11px 14px; border-radius:9px; margin-bottom:12px;}
+.stApp .stopbanner{background:var(--danger-bg); color:var(--danger-ink); font-size:13.5px; padding:16px; border-radius:9px; line-height:1.5; margin-bottom:14px;}
+
+/* Results */
+.stApp .metrics{display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:6px;}
+.stApp .metric{background:var(--surface-2); border-radius:9px; padding:12px 6px; text-align:center;}
+.stApp .metric b{display:block; font-size:18px; font-weight:700; font-family:'Fraunces',Georgia,serif; color:var(--ink);}
+.stApp .metric span{font-size:10px; color:var(--ink-2);}
+.stApp table{width:100%; border-collapse:collapse; font-size:12.5px; table-layout:fixed; margin:6px 0 0; background:transparent;}
+.stApp th, .stApp td{text-align:left; padding:8px 4px; color:var(--ink); background:transparent; border:none; border-bottom:1px solid var(--line);}
+.stApp th{color:var(--ink-3); font-weight:600;}
+
+/* ---------- Responsive ---------- */
+@media (max-width:860px){
+  .st-key-hero{padding-top:30px;}
+  .st-key-hero [data-testid="stHorizontalBlock"]{flex-direction:column !important; gap:28px !important; align-items:stretch !important;}
+  .st-key-hero [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+  .st-key-hero [data-testid="stHorizontalBlock"] > [data-testid="column"]{flex:0 0 auto !important; width:100% !important;}
+  .stApp .how-grid{grid-template-columns:1fr 1fr;}
+}
+@media (max-width:520px){
+  .stApp .how-grid{grid-template-columns:1fr;}
+}
+@media (max-width:420px){
+  .stApp .metrics{grid-template-columns:repeat(3,1fr);}
+}
+@media (max-width:380px){
+  .st-key-topbar{padding:12px 14px;}
+  .stApp .st-key-brand [data-testid^="stBaseButton"]{font-size:17px;}
+}
+@media (max-width:430px){
+  .st-key-topbar{padding:12px 16px;}
+  .st-key-row_topbar{gap:8px;}
+  .st-key-top_cta [data-testid="stBaseButton-primary"]{padding:8px 13px; font-size:12.5px;}
+  .stApp .st-key-brand button p{gap:6px;}
+  .stApp .st-key-brand button p::after{font-size:10px; margin-left:0;}
+}
