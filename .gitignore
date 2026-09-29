@@ -1,17 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+
 # Virtual environment
 .venv/
 
-# Local data
+# Local datasets and generated data
 data/raw/
-data/sample/
-
-__pycache__/
-*.pyc
-
-models
-
-data/raw/
+data/evaluation/
 data/processed/*
 !data/processed/nutrition/
 !data/processed/nutrition/nutrition_reference.csv
+
+# Models / trained artifacts
+models/
+
+# Local sample data
 data/sample/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
