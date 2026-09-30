@@ -6,8 +6,10 @@ __pycache__/
 .venv/
 
 # Local datasets and generated data
-data/raw/
-data/evaluation/
+data/raw/*
+!data/raw/FoodSeg103/
+data/raw/FoodSeg103/*
+!data/raw/FoodSeg103/id2label.json
 data/processed/*
 !data/processed/nutrition/
 !data/processed/nutrition/nutrition_reference.csv
