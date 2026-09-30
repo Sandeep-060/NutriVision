@@ -12,11 +12,6 @@ import numpy as np
 import streamlit as st
 from PIL import Image, ImageOps
 
-# --------------------------------------------------------------------------
-# Paths + import path
-#   Project root = parent of app/. It must be importable so that
-#   `from src.segmentation... import ...` works no matter how Streamlit is launched.
-# --------------------------------------------------------------------------
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -34,9 +29,7 @@ logger = logging.getLogger("nutrivision")
 st.set_page_config(page_title="NutriVision", page_icon="\U0001F957", layout="wide",
                    initial_sidebar_state="collapsed")
 
-# --------------------------------------------------------------------------
 # Real model / FoodSeg103 configuration
-# --------------------------------------------------------------------------
 NUM_FOOD_CLASSES = 103          # class 0 = background, 1..103 = FoodSeg103
 PREVIEW_MAX_SIDE = 1024         # preview only; inference always uses the original bytes
 
@@ -63,17 +56,10 @@ def get_nutrition_reference():
 
 @st.cache_resource(show_spinner="Loading NutriVision model\u2026")
 def get_model():
-    """Load the Keras SegFormer once per Streamlit process and reuse it on every rerun.
+    """Load the Keras SegFormer once per Streamlit process and reuse it on every rerun."""
 
-    The spinner text above is only shown on a cache MISS (i.e. the first analysis);
-    afterwards this returns the cached model instantly. Exceptions are not cached,
-    so a failed load can be retried.
-    """
-    from src.segmentation.model import build_model, MODEL_PATH   # lazy: keeps Home fast
-    if not Path(MODEL_PATH).exists():
-        raise FileNotFoundError(
-            f"Model file not found: {MODEL_PATH} (launch Streamlit from the project root: "
-            f"streamlit run app/app.py)")
+    from src.segmentation.model import build_model
+
     return build_model()
 
 
@@ -91,9 +77,7 @@ HOW_STEPS = [
 STEP_NAMES = ["1 \u00b7 Upload", "2 \u00b7 Review", "3 \u00b7 Quantity", "4 \u00b7 Results"]
 
 
-# --------------------------------------------------------------------------
 # Small helpers: HTML, CSS, images
-# --------------------------------------------------------------------------
 def html(markup: str) -> None:
     """Render raw HTML. Lines are flattened so Markdown never treats indentation as a code block."""
     flat = " ".join(line.strip() for line in markup.strip().splitlines() if line.strip())
@@ -133,9 +117,7 @@ def image_bytes_to_data_uri(image_bytes: bytes) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-# --------------------------------------------------------------------------
 # Session state + callbacks
-# --------------------------------------------------------------------------
 def init_state() -> None:
     defaults = {
         "screen": "home",       # "home" | "app"
@@ -401,9 +383,7 @@ def reset_all() -> None:
               detection_error=None, uploader_n=n)
 
 
-# --------------------------------------------------------------------------
 # Shared pieces
-# --------------------------------------------------------------------------
 def render_topbar() -> None:
     with st.container(key="topbar"):
         with st.container(key="row_topbar"):
@@ -447,9 +427,7 @@ def preview_html(uri: str, detections=None) -> str:
     return f'<div class="preview"><img src="{uri}" alt="Meal photo">{boxes}</div>'
 
 
-# --------------------------------------------------------------------------
 # HOME
-# --------------------------------------------------------------------------
 def render_home() -> None:
     hero_uri = file_to_data_uri(str(HERO_IMAGE_PATH))
     with st.container(key="home"):
@@ -487,9 +465,7 @@ def render_home() -> None:
         """)
 
 
-# --------------------------------------------------------------------------
 # APP STEPS
-# --------------------------------------------------------------------------
 def render_step_upload() -> None:
     ss = st.session_state
     busy = ss.analyzing          # analysis requested by the button on the previous run
@@ -715,9 +691,7 @@ def render_app() -> None:
              3: render_step_quantity, 4: render_step_results}[st.session_state.step]()
 
 
-# --------------------------------------------------------------------------
 # Entry point
-# --------------------------------------------------------------------------
 def main() -> None:
     init_state()
     load_css()
