@@ -13,7 +13,7 @@ data/raw/FoodSeg103/*
 data/processed/*
 !data/processed/nutrition/
 !data/processed/nutrition/nutrition_reference.csv
-
+data/splits/
 # Models / trained artifacts
 models/
 
