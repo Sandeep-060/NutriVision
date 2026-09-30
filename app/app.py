@@ -1,34 +1,81 @@
 from __future__ import annotations
 import base64
+import hashlib
 import io
+import json
+import logging
+import sys
 from html import escape
 from pathlib import Path
+
+import numpy as np
 import streamlit as st
 from PIL import Image, ImageOps
 
+# --------------------------------------------------------------------------
+# Paths + import path
+#   Project root = parent of app/. It must be importable so that
+#   `from src.segmentation... import ...` works no matter how Streamlit is launched.
+# --------------------------------------------------------------------------
 APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.nutrition.calculator import calculate_meal_nutrition, load_nutrition_reference
+
 HERO_IMAGE_PATH = APP_DIR / "assets" / "hero_image.png"
+SAMPLE_IMAGE_PATH = APP_DIR / "assets" / "sample_meal.png"
 CSS_PATH = APP_DIR / "style.css"
+FOODSEG_LABELS_PATH = PROJECT_ROOT / "data" / "raw" / "FoodSeg103" / "id2label.json"
+
+logger = logging.getLogger("nutrivision")
+
+st.set_page_config(page_title="NutriVision", page_icon="\U0001F957", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 # --------------------------------------------------------------------------
-# Static data (mock). Labels mirror the prototype's supported food list.
+# Real model / FoodSeg103 configuration
 # --------------------------------------------------------------------------
-LABELS = {
-    "rice": "Rice", "chapati": "Chapati", "dal": "Dal", "sambar": "Sambar",
-    "rasam": "Rasam", "curd_raita": "Curd / raita", "paneer_curry": "Paneer curry",
-    "potato_curry": "Potato curry", "chicken_curry": "Chicken curry",
-    "biryani": "Biryani", "idli": "Idli", "dosa": "Dosa", "vada": "Vada",
-    "poori": "Poori", "samosa": "Samosa", "naan": "Naan", "papad": "Papad",
-}
-LABEL_TO_KEY = {v: k for k, v in LABELS.items()}
+NUM_FOOD_CLASSES = 103          # class 0 = background, 1..103 = FoodSeg103
+PREVIEW_MAX_SIDE = 1024         # preview only; inference always uses the original bytes
 
-MOCK_DETECTIONS = [
-    {"id": 0, "pred": "rice", "conf": 0.94, "box": {"l": 5, "t": 8, "w": 42, "h": 36}},
-    {"id": 1, "pred": "sambar", "conf": 0.58, "box": {"l": 55, "t": 5, "w": 34, "h": 34}},
-    {"id": 2, "pred": "chapati", "conf": 0.89, "box": {"l": 9, "t": 51, "w": 36, "h": 36}},
-    {"id": 3, "pred": "paneer_curry", "conf": 0.41, "box": {"l": 53, "t": 47, "w": 38, "h": 38}},
-]
-THRESHOLD = 0.65
+
+@st.cache_data(show_spinner=False)
+def load_foodseg_labels() -> dict[int, str]:
+    """FoodSeg103 class id -> canonical name (background / id 0 excluded)."""
+    if not FOODSEG_LABELS_PATH.exists():
+        raise FileNotFoundError(f"FoodSeg103 label mapping not found: {FOODSEG_LABELS_PATH}")
+    with FOODSEG_LABELS_PATH.open("r", encoding="utf-8") as f:
+        raw = json.load(f)
+    items = raw.items() if isinstance(raw, dict) else enumerate(raw)
+    labels = {int(k): str(v).strip() for k, v in items if int(k) != 0}
+    if len(labels) != NUM_FOOD_CLASSES:
+        raise ValueError(f"Expected {NUM_FOOD_CLASSES} FoodSeg103 food classes, found {len(labels)}.")
+    return labels
+
+
+@st.cache_data(show_spinner=False)
+def get_nutrition_reference():
+    """Stage 7 nutrition reference (source of truth), loaded once via calculator.py."""
+    return load_nutrition_reference()
+
+
+@st.cache_resource(show_spinner="Loading NutriVision model\u2026")
+def get_model():
+    """Load the Keras SegFormer once per Streamlit process and reuse it on every rerun.
+
+    The spinner text above is only shown on a cache MISS (i.e. the first analysis);
+    afterwards this returns the cached model instantly. Exceptions are not cached,
+    so a failed load can be retried.
+    """
+    from src.segmentation.model import build_model, MODEL_PATH   # lazy: keeps Home fast
+    if not Path(MODEL_PATH).exists():
+        raise FileNotFoundError(
+            f"Model file not found: {MODEL_PATH} (launch Streamlit from the project root: "
+            f"streamlit run app/app.py)")
+    return build_model()
+
 
 HOW_STEPS = [
     ("Snap", "Upload a photo",
@@ -43,68 +90,46 @@ HOW_STEPS = [
 
 STEP_NAMES = ["1 \u00b7 Upload", "2 \u00b7 Review", "3 \u00b7 Quantity", "4 \u00b7 Results"]
 
-st.set_page_config(
-    page_title="NutriVision",
-    page_icon="\U0001F957",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
 
 # --------------------------------------------------------------------------
-# Helpers
+# Small helpers: HTML, CSS, images
 # --------------------------------------------------------------------------
-def load_css() -> None:
-    css = CSS_PATH.read_text(encoding="utf-8")
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-
-
 def html(markup: str) -> None:
-    """Render a small presentation snippet.
-
-    Lines are stripped and joined so Markdown never treats indented HTML as a
-    code block (which is what makes raw tags show up on screen).
-    """
-    flat = " ".join(line.strip() for line in markup.strip().splitlines())
+    """Render raw HTML. Lines are flattened so Markdown never treats indentation as a code block."""
+    flat = " ".join(line.strip() for line in markup.strip().splitlines() if line.strip())
     st.markdown(flat, unsafe_allow_html=True)
 
 
-def svg_data_uri(svg: str) -> str:
-    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
+def load_css() -> None:
+    if CSS_PATH.exists():
+        st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 
-def plate_svg(bg: str) -> str:
-    """The prototype's sample-meal illustration (same shapes and colours)."""
-    return f"""<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-<rect x="0" y="0" width="100" height="100" fill="{bg}"/>
-<ellipse cx="26" cy="26" rx="21" ry="18" fill="#F3E9CB"/>
-<ellipse cx="20" cy="21" rx="2.1" ry="1.3" fill="#E4D6A8"/><ellipse cx="30" cy="18" rx="2" ry="1.2" fill="#E4D6A8"/>
-<ellipse cx="33" cy="30" rx="2" ry="1.2" fill="#E4D6A8"/><ellipse cx="18" cy="32" rx="2" ry="1.2" fill="#E4D6A8"/>
-<circle cx="72" cy="22" r="17" fill="#E7DFC9"/><circle cx="72" cy="22" r="13.5" fill="#C9752E"/>
-<circle cx="67" cy="18" r="1.2" fill="#8FBE6E"/><circle cx="76" cy="26" r="1.1" fill="#8FBE6E"/><circle cx="72" cy="15" r="1" fill="#8FBE6E"/>
-<circle cx="27" cy="69" r="18" fill="#D9A360"/>
-<path d="M12,69 Q27,60 42,69" stroke="#B87F3E" stroke-width="1" fill="none" opacity=".6"/>
-<path d="M12,73 Q27,66 42,73" stroke="#B87F3E" stroke-width="1" fill="none" opacity=".6"/>
-<path d="M14,78 Q27,72 40,78" stroke="#B87F3E" stroke-width="1" fill="none" opacity=".6"/>
-<circle cx="72" cy="66" r="19" fill="#E7DFC9"/><circle cx="72" cy="66" r="15.5" fill="#A63D22"/>
-<rect x="65" y="60" width="7" height="7" rx="1.3" fill="#FBF6EA"/><rect x="74" y="68" width="6.5" height="6.5" rx="1.3" fill="#FBF6EA"/>
-<rect x="68" y="70" width="6" height="6" rx="1.2" fill="#FBF6EA"/></svg>"""
+@st.cache_data(show_spinner=False)
+def file_to_data_uri(path_str: str) -> str | None:
+    path = Path(path_str)
+    if not path.exists():
+        return None
+    mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-HERO_IMAGE_URI = (
-    "data:image/png;base64,"
-    + base64.b64encode(HERO_IMAGE_PATH.read_bytes()).decode("ascii")
-)
-SAMPLE_IMAGE_URI = svg_data_uri(plate_svg("#EFEAD9"))  # prototype's sample photo
+def decode_image(image_bytes: bytes) -> Image.Image:
+    """The single decode path for both preview and inference (EXIF-corrected, RGB)."""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        image = ImageOps.exif_transpose(image)
+        return image.convert("RGB")
+    except (OSError, ValueError, Image.DecompressionBombError) as exc:
+        raise ValueError("That file couldn't be read as an image. Please use a JPG or PNG.") from exc
 
 
-def image_to_data_uri(uploaded) -> str:
-    """Downscale an uploaded photo so the preview HTML stays small."""
-    img = Image.open(io.BytesIO(uploaded.getvalue()))
-    img = ImageOps.exif_transpose(img).convert("RGB")
-    img.thumbnail((900, 900))
+def image_bytes_to_data_uri(image_bytes: bytes) -> str:
+    """Optimised, aspect-preserving preview. Used for DISPLAY only - never for inference."""
+    image = decode_image(image_bytes)
+    image.thumbnail((PREVIEW_MAX_SIDE, PREVIEW_MAX_SIDE), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    image.save(buf, format="JPEG", quality=85, optimize=True)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
@@ -116,15 +141,43 @@ def init_state() -> None:
         "screen": "home",       # "home" | "app"
         "step": 1,              # 1..4 (inside the app)
         "max_reached": 1,
-        "img_uri": None,
+        "img_uri": None,        # optimised preview (display only)
+        "image_bytes": None,    # ORIGINAL bytes (used for inference)
+        "image_key": None,      # sha1 of image_bytes
+        "analyzed_key": None,   # image_key that `detections` belongs to
+        "analyzing": False,
         "upload_sig": None,
         "detections": [],
+        "detection_error": None,
         "quantities": {},
         "qty_errors": [],
+        "nutrition": None,          # result of calculate_meal_nutrition() for the current meal
+        "nutrition_error": None,
         "uploader_n": 0,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+
+
+def clear_analysis() -> None:
+    """Forget everything derived from the previous image (detections, decisions, quantities)."""
+    ss = st.session_state
+    for key in list(ss.keys()):
+        if key.startswith(("sel_", "qty_")):
+            del ss[key]
+    ss.update(detections=[], quantities={}, qty_errors=[], nutrition=None, nutrition_error=None,
+              analyzed_key=None, analyzing=False, max_reached=1, step=1)
+
+
+def set_image(image_bytes: bytes, upload_sig=None) -> None:
+    ss = st.session_state
+    uri = image_bytes_to_data_uri(image_bytes)          # raises ValueError if unreadable
+    clear_analysis()
+    ss.image_bytes = image_bytes
+    ss.img_uri = uri
+    ss.image_key = hashlib.sha1(image_bytes).hexdigest()
+    ss.upload_sig = upload_sig
+    ss.detection_error = None
 
 
 def go_home() -> None:
@@ -142,81 +195,210 @@ def go_step(n: int) -> None:
 
 
 def load_sample() -> None:
-    st.session_state.img_uri = SAMPLE_IMAGE_URI
-    st.session_state.upload_sig = None
-    st.session_state.uploader_n += 1  # clears the file_uploader
+    ss = st.session_state
+    try:
+        if not SAMPLE_IMAGE_PATH.exists():
+            raise FileNotFoundError(f"Sample meal image not found: {SAMPLE_IMAGE_PATH}")
+        set_image(SAMPLE_IMAGE_PATH.read_bytes(), upload_sig=None)   # same pipeline as an upload
+        ss.uploader_n += 1
+    except Exception as exc:
+        logger.exception("Could not load sample meal")
+        ss.detection_error = f"Could not load the sample meal ({type(exc).__name__}): {exc}"
 
 
-def run_detection() -> None:
-    """MOCK detection - replaced by the real YOLO pipeline later."""
+def request_analysis() -> None:
+    """Button callback: only flags the request. The heavy work runs in the page body
+    (so a spinner can be shown), and never during Confirm / Change / Unsupported."""
+    ss = st.session_state
+    ss.detection_error = None
+    if ss.analyzed_key and ss.analyzed_key == ss.image_key:
+        ss.step = 2                      # same image already analysed: keep the user's decisions
+        return
+    ss.analyzing = True
+
+
+def detections_from_result(result: dict, image_size: tuple[int, int],
+                           labels: dict[int, str]) -> list[dict]:
+    """Adapter: real pipeline output -> review-UI detection objects (variable length)."""
+    width, height = image_size
+    res_w, res_h = (int(v) for v in result["original_size"])
+    if (res_w, res_h) != (width, height):
+        raise RuntimeError(f"Inference reported image size {res_w}x{res_h} but the image is "
+                           f"{width}x{height}; boxes would be misaligned.")
+
+    parsed = []
+    for info in result["boxes"]:
+        class_id = int(info["foodseg103_class_id"])
+        name = labels.get(class_id)
+        if name is None:                 # background (0) or an id outside FoodSeg103
+            continue
+        x0, y0, x1, y1 = (float(v) for v in info["box"])
+        parsed.append((int(info["area"]), class_id, name, (x0, y0, x1, y1)))
+    parsed.sort(key=lambda p: -p[0])     # largest regions first; numbering follows this order
+
     dets = []
-    for d in MOCK_DETECTIONS:
-        status = "confirmed" if d["conf"] >= THRESHOLD else "unsupported"
-        dets.append({**d, "status": status, "food": d["pred"] if status == "confirmed" else None})
-    st.session_state.detections = dets
-    st.session_state.quantities = {}
-    st.session_state.qty_errors = []
-    st.session_state.max_reached = max(st.session_state.max_reached, 2)
-    st.session_state.step = 2
+    for det_id, (area, class_id, name, (x0, y0, x1, y1)) in enumerate(parsed):
+        # original-image pixels -> percentages of the ORIGINAL width/height
+        left = max(0.0, min(100.0, x0 / width * 100.0))
+        top = max(0.0, min(100.0, y0 / height * 100.0))
+        box_w = max(0.0, min(100.0 - left, (x1 - x0 + 1) / width * 100.0))
+        box_h = max(0.0, min(100.0 - top, (y1 - y0 + 1) / height * 100.0))
+        dets.append({
+            "id": det_id,
+            "pred": name,
+            "pred_class_id": class_id,
+            "foodseg103_class_id": class_id,
+            "food": name,
+            "box": {"l": round(left, 3), "t": round(top, 3), "w": round(box_w, 3), "h": round(box_h, 3)},
+            "box_px": [x0, y0, x1, y1],
+            "area": area,
+            "status": "needs_review",
+        })
+    return dets
+
+
+def analyze_current_image() -> None:
+    """Runs real inference. Called from the Upload page only when 'Analyze meal' was clicked."""
+    ss = st.session_state
+    stage = "Analysis failed"
+    try:
+        if not ss.image_bytes:
+            raise ValueError("No meal image is available for analysis.")
+        labels = load_foodseg_labels()
+        stage = "Could not load the NutriVision model"
+        model = get_model()                              # cached; spinner only on first load
+        stage = "Analysis failed"
+        with st.spinner("Analyzing your meal\u2026"):
+            from src.segmentation.inference import predict
+            image = decode_image(ss.image_bytes)         # ORIGINAL bytes, not the preview
+            result = predict(model, np.asarray(image, dtype=np.uint8))
+            dets = detections_from_result(result, image.size, labels)
+    except Exception as exc:
+        logger.exception("%s", stage)
+        ss.detections = []
+        ss.detection_error = f"{stage} ({type(exc).__name__}): {exc}"
+        return
+
+    ss.detections = dets
+    ss.analyzed_key = ss.image_key
+    ss.quantities = {}
+    ss.qty_errors = []
+    ss.max_reached = max(ss.max_reached, 2)
+    ss.step = 2
+
+
+def invalidate_results() -> None:
+    """A review decision changed: results are stale and Quantity/Results must be re-entered
+    through 'Continue to quantities'."""
+    ss = st.session_state
+    ss.nutrition = None
+    ss.nutrition_error = None
+    ss.max_reached = min(ss.max_reached, 2)
 
 
 def set_status(i: int, status: str) -> None:
-    d = st.session_state.detections[i]
+    ss = st.session_state
+    d = ss.detections[i]
     if status == "confirmed":
-        d["status"], d["food"] = "confirmed", d["pred"]
+        invalidate_results()
+        ss.pop(f"sel_{i}", None)
+        d["status"] = "confirmed"
+        d["food"] = d["pred"]
+        d["foodseg103_class_id"] = d["pred_class_id"]
     elif status == "unsupported":
-        d["status"], d["food"] = "unsupported", None
+        invalidate_results()
+        ss.pop(f"sel_{i}", None)
+        d["status"] = "unsupported"
+        d["food"] = None
     else:
+        if d["status"] in ("changing", "corrected"):
+            return                        # already choosing / corrected: keep the current choice
+        invalidate_results()
         d["status"] = "changing"
+        d["food"] = None
 
 
 def pick_food(i: int) -> None:
     d = st.session_state.detections[i]
-    val = st.session_state.get(f"sel_{i}")
-    if val:
-        d["status"], d["food"] = "corrected", LABEL_TO_KEY[val]
+    val = st.session_state.get(f"sel_{i}")      # a FoodSeg103 class id
+    invalidate_results()
+    if val is not None:
+        d["status"] = "corrected"
+        d["food"] = load_foodseg_labels()[int(val)]
+        d["foodseg103_class_id"] = int(val)
     else:
-        d["status"], d["food"] = "changing", None
+        d["status"] = "changing"
+        d["food"] = None
+
+
+def get_unique_supported_foods() -> list[dict]:
+    """Review is detection-level; quantity/nutrition are food-level.
+
+    One entry per FINAL FoodSeg103 class id among confirmed/corrected detections (first-seen
+    order). Unsupported detections are not FoodSeg103 classes and never appear here.
+    """
+    labels = load_foodseg_labels()
+    seen: dict[int, dict] = {}
+    for d in st.session_state.detections:
+        if d["status"] in ("confirmed", "corrected") and d["food"]:
+            cid = int(d["foodseg103_class_id"])
+            seen.setdefault(cid, {"foodseg103_class_id": cid, "food": labels[cid]})
+    return list(seen.values())
 
 
 def build_qty_screen() -> None:
-    st.session_state.max_reached = max(st.session_state.max_reached, 3)
-    st.session_state.qty_errors = []
-    st.session_state.step = 3
+    ss = st.session_state
+    ids = {f["foodseg103_class_id"] for f in get_unique_supported_foods()}
+    ss.quantities = {cid: g for cid, g in ss.quantities.items() if cid in ids}   # drop stale foods
+    ss.nutrition = None
+    ss.nutrition_error = None
+    ss.max_reached = max(ss.max_reached, 3)
+    ss.qty_errors = []
+    ss.step = 3
 
 
-def remember_qty(det_id: int) -> None:
-    val = st.session_state.get(f"qty_{det_id}")
-    st.session_state.quantities[det_id] = val
-    if det_id in st.session_state.qty_errors:
-        st.session_state.qty_errors.remove(det_id)
+def remember_qty(class_id: int) -> None:
+    val = st.session_state.get(f"qty_{class_id}")
+    st.session_state.quantities[class_id] = val
+    if class_id in st.session_state.qty_errors:
+        st.session_state.qty_errors.remove(class_id)
 
 
 def compute_nutrition() -> None:
-    """PLACEHOLDER - validates quantities only; no nutrition maths yet."""
-    supported = [d for d in st.session_state.detections if d["status"] != "unsupported"]
-    if supported:
-        errors = []
-        for d in supported:
-            v = st.session_state.quantities.get(d["id"])
-            if not v or v <= 0:
-                errors.append(d["id"])
+    """Validate one positive quantity per unique food, then run the Stage 7 engine."""
+    ss = st.session_state
+    ss.nutrition = None
+    ss.nutrition_error = None
+    foods = get_unique_supported_foods()
+    if foods:
+        errors, meal = [], []
+        for f in foods:
+            cid = f["foodseg103_class_id"]
+            grams = ss.quantities.get(cid)
+            if grams is None or not grams > 0:
+                errors.append(cid)
+            else:
+                meal.append({"foodseg103_class_id": cid, "grams": float(grams)})
         if errors:
-            st.session_state.qty_errors = errors
+            ss.qty_errors = errors
             return
-    st.session_state.max_reached = max(st.session_state.max_reached, 4)
-    st.session_state.step = 4
+        try:
+            ss.nutrition = calculate_meal_nutrition(meal, get_nutrition_reference())
+        except Exception as exc:
+            logger.exception("Nutrition calculation failed")
+            ss.nutrition_error = f"Could not calculate nutrition ({type(exc).__name__}): {exc}"
+            return
+    ss.qty_errors = []
+    ss.max_reached = max(ss.max_reached, 4)
+    ss.step = 4
 
 
 def reset_all() -> None:
-    n = st.session_state.uploader_n + 1
-    for key in list(st.session_state.keys()):
-        if key.startswith(("sel_", "qty_")):
-            del st.session_state[key]
-    st.session_state.update(
-        step=1, max_reached=1, img_uri=None, upload_sig=None,
-        detections=[], quantities={}, qty_errors=[], uploader_n=n,
-    )
+    ss = st.session_state
+    n = ss.uploader_n + 1
+    clear_analysis()
+    ss.update(img_uri=None, image_bytes=None, image_key=None, upload_sig=None,
+              detection_error=None, uploader_n=n)
 
 
 # --------------------------------------------------------------------------
@@ -244,15 +426,22 @@ def render_stepbar() -> None:
 
 
 def preview_html(uri: str, detections=None) -> str:
+    """Image + overlay. Boxes are % of the ORIGINAL image; the <img> is width:100%/height:auto
+    (no crop, no distortion), so the % coordinate system matches the displayed pixels exactly."""
     boxes = ""
     for i, d in enumerate(detections or []):
-        if d["status"] == "unsupported":
+        status = d["status"]
+        if status == "unsupported":
             cls, label = "b-bad", f"{i + 1} unsupported"
-        elif d["status"] == "corrected":
-            cls, label = "b-warn", f"{i + 1} {escape(LABELS[d['food']])}"
-        else:
-            cls, label = "b-ok", f"{i + 1} {escape(LABELS[d['food']] if d['food'] else LABELS[d['pred']])}"
+        elif status == "confirmed":
+            cls, label = "b-ok", f"{i + 1} {escape(d['food'] or d['pred'])}"
+        elif status == "corrected":
+            cls, label = "b-warn", f"{i + 1} {escape(d['food'] or d['pred'])}"
+        else:  # needs_review / changing: still showing the model's prediction
+            cls, label = "b-warn", f"{i + 1} {escape(d['pred'])}"
         b = d["box"]
+        if b["t"] < 7:
+            cls += " lbl-in"     # keep the label inside the image when the box touches the top edge
         boxes += (f'<div class="box {cls}" style="left:{b["l"]}%;top:{b["t"]}%;'
                   f'width:{b["w"]}%;height:{b["h"]}%;"><span>{label}</span></div>')
     return f'<div class="preview"><img src="{uri}" alt="Meal photo">{boxes}</div>'
@@ -262,6 +451,7 @@ def preview_html(uri: str, detections=None) -> str:
 # HOME
 # --------------------------------------------------------------------------
 def render_home() -> None:
+    hero_uri = file_to_data_uri(str(HERO_IMAGE_PATH))
     with st.container(key="home"):
         with st.container(key="hero"):
             left, right = st.columns([1.1, 1], gap="large", vertical_alignment="center")
@@ -278,7 +468,8 @@ def render_home() -> None:
                     st.button("Analyze your meal", key="hero_cta", type="primary", on_click=start_app)
                     html('<a class="btn-text" href="#how" target="_self">See how it works</a>')
             with right:
-                html(f'<div class="plate-card"><img src="{HERO_IMAGE_URI}" alt="Sample meal illustration"></div>')
+                if hero_uri:
+                    html(f'<div class="plate-card"><img src="{hero_uri}" alt="Sample meal illustration"></div>')
 
         cards = "".join(
             f'<div class="how-card"><div class="n">{n}</div><div class="how-h">{h}</div>'
@@ -301,6 +492,8 @@ def render_home() -> None:
 # --------------------------------------------------------------------------
 def render_step_upload() -> None:
     ss = st.session_state
+    busy = ss.analyzing          # analysis requested by the button on the previous run
+    ss.analyzing = False         # consumed: an interrupted run must never silently resume
     with st.container(key="card_upload"):
         html('<div class="st-title">Upload your meal photo</div>'
              '<div class="substep">One clear photo of the whole plate works best.</div>')
@@ -314,47 +507,76 @@ def render_step_upload() -> None:
         if up is not None:
             sig = (up.name, up.size)
             if ss.upload_sig != sig:
-                ss.img_uri = image_to_data_uri(up)
-                ss.upload_sig = sig
+                try:
+                    set_image(up.getvalue(), upload_sig=sig)
+                except ValueError as exc:
+                    clear_analysis()
+                    ss.update(image_bytes=None, img_uri=None, image_key=None,
+                              upload_sig=sig, detection_error=str(exc))
                 st.rerun()
 
         with st.container(key="row_sample"):
-            st.button("Or try a sample meal", key="sample_btn", type="tertiary", on_click=load_sample)
+            st.button("Or try a sample meal", key="sample_btn", type="tertiary",
+                      on_click=load_sample, disabled=busy)
 
         if has_image:
             html(preview_html(ss.img_uri))
 
+        if ss.detection_error:
+            html(f'<div class="stopbanner">{escape(ss.detection_error)}</div>')
         with st.container(key="foot_in_card"):
             st.button("Analyze meal", key="analyze_btn", type="primary",
-                      disabled=not has_image, on_click=run_detection)
+                      disabled=(not has_image) or busy, on_click=request_analysis)
+
+        if busy and has_image:
+            analyze_current_image()          # spinner(s) render here; blocks only this run
+            if ss.detection_error:           # failed: stay on Upload and show why
+                html(f'<div class="stopbanner">{escape(ss.detection_error)}</div>')
+            else:
+                st.rerun()                   # success: step is now 2 -> Review
 
 
 def render_step_review() -> None:
     ss = st.session_state
     dets = ss.detections
+    labels = load_foodseg_labels()
 
     with st.container(key="card_review_head"):
         html('<div class="st-title">Review what we found</div>'
              '<div class="substep">Confirm each item, fix it, or mark it unsupported. '
              'Every item needs a decision.</div>')
-        html(preview_html(ss.img_uri or SAMPLE_IMAGE_URI, dets))
+        if ss.img_uri:
+            html(preview_html(ss.img_uri, dets))
+
+    if not dets:
+        with st.container(key="card_review_empty"):
+            html('<div class="stopbanner" style="margin-bottom:0;">No supported food items were '
+                 'detected. Try another meal photo.</div>')
 
     for i, d in enumerate(dets):
         status = d["status"]
         if status == "unsupported":
             badge_cls, badge = "bg-bad", "Unsupported"
         elif status == "corrected":
-            badge_cls, badge = "bg-warn", f"Corrected \u2192 {escape(LABELS[d['food']])}"
-        else:
+            badge_cls, badge = "bg-warn", f"Corrected \u2192 {escape(d['food'])}"
+        elif status == "confirmed":
             badge_cls, badge = "bg-ok", "Confirmed"
-        title = escape(LABELS[d["food"]]) if status in ("confirmed", "corrected") and d["food"] else f"Item {i + 1}"
-        below = " \u00b7 below review threshold" if d["conf"] < THRESHOLD else ""
+        elif status == "changing":
+            badge_cls, badge = "bg-warn", "Choose a food"
+        else:
+            badge_cls, badge = "bg-warn", "Needs review"
+        if status in ("confirmed", "corrected") and d["food"]:
+            title = escape(d["food"])
+        elif status == "needs_review":
+            title = escape(d["pred"])
+        else:
+            title = f"Item {i + 1}"
 
         with st.container(key=f"card_item_{i}"):
             html(f"""
             <div class="item-head"><span class="item-name">{i + 1} &nbsp;{title}</span>
             <span class="badge {badge_cls}">{badge}</span></div>
-            <div class="conf">Model predicted {escape(LABELS[d['pred']])} \u00b7 {round(d['conf'] * 100)}% confidence{below}</div>
+            <div class="conf">Model predicted {escape(d['pred'])} \u00b7 FoodSeg103 class {d['pred_class_id']}</div>
             """)
             with st.container(key=f"pills_{i}"):
                 st.button("Confirm", key=f"pill_c_{i}",
@@ -367,13 +589,17 @@ def render_step_review() -> None:
                           type="primary" if status == "unsupported" else "secondary",
                           on_click=set_status, args=(i, "unsupported"))
             if status in ("changing", "corrected"):
-                options = [LABELS[k] for k in LABELS if k != d["pred"]]
-                index = options.index(LABELS[d["food"]]) if status == "corrected" and d["food"] else None
+                # real FoodSeg103 vocabulary only: no background, no "Unsupported", not the current prediction
+                # options = sorted((cid for cid in labels if cid != d["pred_class_id"]),
+                #                  key=lambda cid: labels[cid].lower())
+                options = sorted(labels.keys(), key=lambda cid: labels[cid].lower())
+                index = options.index(d["foodseg103_class_id"]) if status == "corrected" else None
                 st.selectbox("Supported food", options, index=index, key=f"sel_{i}",
+                             format_func=lambda cid: labels[cid],
                              placeholder="Select a supported food\u2026",
                              label_visibility="collapsed", on_change=pick_food, args=(i,))
 
-    all_resolved = all(
+    all_resolved = bool(dets) and all(
         d["status"] in ("confirmed", "unsupported") or (d["status"] == "corrected" and d["food"])
         for d in dets
     )
@@ -385,7 +611,7 @@ def render_step_review() -> None:
 
 def render_step_quantity() -> None:
     ss = st.session_state
-    supported = [d for d in ss.detections if d["status"] != "unsupported"]
+    supported = get_unique_supported_foods()
 
     with st.container(key="card_qty"):
         html('<div class="st-title">How much did you eat?</div>'
@@ -394,17 +620,20 @@ def render_step_quantity() -> None:
         if not supported:
             html('<div class="stopbanner">No supported foods were confirmed, so there\'s nothing to '
                  'weigh yet. Go back and confirm or correct at least one item.</div>')
-        for d in supported:
-            with st.container(key=f"qty_item_{d['id']}"):
-                html(f'<div class="qtyname">{escape(LABELS[d["food"]])}</div>')
+        for f in supported:
+            cid = f["foodseg103_class_id"]
+            with st.container(key=f"qty_item_{cid}"):
+                html(f'<div class="qtyname">{escape(f["food"])}</div>')
                 st.number_input(
-                    f"Grams of {LABELS[d['food']]}", min_value=1.0, step=1.0, format="%g",
-                    value=ss.quantities.get(d["id"]), placeholder="Grams",
-                    key=f"qty_{d['id']}", label_visibility="collapsed",
-                    on_change=remember_qty, args=(d["id"],),
+                    f"Grams of {f['food']}", min_value=1.0, step=1.0, format="%g",
+                    value=ss.quantities.get(cid), placeholder="Grams",
+                    key=f"qty_{cid}", label_visibility="collapsed",
+                    on_change=remember_qty, args=(cid,),
                 )
-                if d["id"] in ss.qty_errors:
+                if cid in ss.qty_errors:
                     html('<div class="err">Enter a quantity greater than zero.</div>')
+        if ss.nutrition_error:
+            html(f'<div class="stopbanner">{escape(ss.nutrition_error)}</div>')
 
     with st.container(key="foot_lr"):
         st.button("Back", key="qty_back", on_click=go_step, args=(2,))
@@ -413,11 +642,13 @@ def render_step_quantity() -> None:
 
 def render_step_results() -> None:
     ss = st.session_state
-    supported = [d for d in ss.detections if d["status"] != "unsupported"]
-    excluded = len(ss.detections) - len(supported)
+    foods = get_unique_supported_foods()
+    excluded = sum(1 for d in ss.detections if d["status"] == "unsupported")
+    meal = ss.nutrition
+    labels = load_foodseg_labels()
 
     with st.container(key="card_results"):
-        if not supported:
+        if not foods:
             plural = "s were" if excluded > 1 else " was"
             html(f"""
             <div class="st-title">No nutrition to show</div>
@@ -425,25 +656,43 @@ def render_step_results() -> None:
             unsupported, so NutriVision can't calculate nutrition for this meal. Go back and review the
             items, or start a new meal.</div>
             """)
+        elif meal is None:
+            html("""
+            <div class="st-title">No nutrition to show</div>
+            <div class="stopbanner" style="margin-top:10px;">Nutrition hasn't been calculated yet.
+            Go back to Quantity and press Calculate nutrition.</div>
+            """)
         else:
-            n = len(supported)
-            sub = f"{n} supported item{'s' if n > 1 else ''} included"
+            n = len(foods)
+            sub = f"{n} food{'s' if n > 1 else ''} included"
             if excluded:
                 sub += f" \u00b7 {excluded} unsupported item{'s' if excluded > 1 else ''} excluded"
             banner = ""
             if excluded:
                 banner = (f'<div class="banner">{excluded} detected item{"s were" if excluded > 1 else " was"} '
                           f'unsupported and left out of the totals below.</div>')
+            def fmt(v, nd=1, unit=""):
+                return "\u2014" if v is None else f"{v:.{nd}f}{unit}"
+
+            totals = meal["totals"]
             metrics = "".join(
-                f'<div class="metric"><b>\u2014</b><span>{lab}</span></div>'
-                for lab in ("Calories", "Protein", "Carbs", "Fat", "Fiber")
+                f'<div class="metric"><b>{fmt(totals[key], nd, unit)}</b><span>{lab}</span></div>'
+                for lab, key, nd, unit in (
+                    ("Calories", "calories_kcal", 0, " kcal"), ("Protein", "protein_g", 1, " g"),
+                    ("Carbs", "carb_g", 1, " g"), ("Fat", "fat_total_g", 1, " g"),
+                    ("Fiber", "fiber_g", 1, " g"))
             )
             rows = ""
-            for d in supported:
-                grams = ss.quantities.get(d["id"])
-                qty = f"{grams:g} g" if grams else "\u2014"
-                rows += (f"<tr><td>{escape(LABELS[d['food']])}</td><td>{qty}</td>"
-                         + "<td>\u2014</td>" * 5 + "</tr>")
+            for r in meal["foods"]:
+                name = labels.get(r["foodseg103_class_id"], r["class_name"])
+                rows += (f"<tr><td>{escape(name)}</td><td>{r['grams']:g} g</td>"
+                         f"<td>{fmt(r['calories_kcal'], 0)}</td><td>{fmt(r['protein_g'])}</td>"
+                         f"<td>{fmt(r['carb_g'])}</td><td>{fmt(r['fat_total_g'])}</td>"
+                         f"<td>{fmt(r['fiber_g'])}</td></tr>")
+            rows += (f"<tr><td><b>Meal total</b></td><td>{fmt(sum(r['grams'] for r in meal['foods']), 0, ' g')}</td>"
+                     f"<td><b>{fmt(totals['calories_kcal'], 0)}</b></td><td><b>{fmt(totals['protein_g'])}</b></td>"
+                     f"<td><b>{fmt(totals['carb_g'])}</b></td><td><b>{fmt(totals['fat_total_g'])}</b></td>"
+                     f"<td><b>{fmt(totals['fiber_g'])}</b></td></tr>")
             html(f"""
             <div class="st-title">Meal nutrition</div>
             <div class="substep">{sub}</div>

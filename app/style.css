@@ -265,17 +265,22 @@ html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"]{
 /* Preview + detection boxes */
 .stApp .preview{
   position:relative; border-radius:12px; overflow:hidden; margin-top:14px; width:100%;
-  aspect-ratio:1/1; background:var(--surface-2);
+  background:var(--surface-2);
 }
-.stApp .preview img{display:block; width:100%; height:100%; object-fit:cover; margin:0;}
+.stApp .preview img{display:block; width:100%; height:auto; object-fit:contain; margin:0;}
 .stApp .box{position:absolute; border-width:2px; border-style:solid; border-radius:3px;}
 .stApp .box span{
   position:absolute; top:-20px; left:-2px; font-size:10.5px; padding:2px 6px; border-radius:4px;
   white-space:nowrap; font-weight:600;
 }
+.stApp .box.lbl-in span{top:2px; left:2px;}   /* box touches the top edge: keep label inside the image */
 .stApp .b-ok{border-color:var(--green);} .stApp .b-ok span{background:var(--green-bg); color:var(--green-ink);}
 .stApp .b-warn{border-color:var(--mango); border-style:dashed;} .stApp .b-warn span{background:var(--mango-bg); color:var(--mango-ink);}
 .stApp .b-bad{border-color:var(--danger); border-style:dashed;} .stApp .b-bad span{background:var(--danger-bg); color:var(--danger-ink);}
+
+/* Loading feedback (model load / inference spinner) */
+[data-testid="stSpinner"], [data-testid="stSpinner"] *{color:var(--ink-2) !important; font-size:13.5px;}
+[data-testid="stSpinner"]{margin-top:12px;}
 
 /* Review cards */
 .stApp .item-head{display:flex; justify-content:space-between; align-items:center; gap:8px; padding-bottom:2px;}
